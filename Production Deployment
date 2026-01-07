@@ -1,0 +1,58 @@
+#!/bin/bash
+# tulpa_deploy.sh
+set -e
+
+echo "Setting up Tulpa AI Assistant..."
+
+# Create systemd service
+sudo cat > /etc/systemd/system/tulpa.service << EOF
+[Unit]
+Description=Tulpa AI Assistant
+After=network.target ollama.service
+Wants=ollama.service
+
+[Service]
+Type=exec
+User=$USER
+WorkingDirectory=/home/$USER/tulpa-ai
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+ExecStartPre=/bin/sleep 10  # Wait for Ollama
+ExecStart=/usr/bin/python3 /home/$USER/tulpa-ai/enhanced_rag_tulpa.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Create startup script
+cat > start_tulpa.sh << 'EOF'
+#!/bin/bash
+# Load environment
+source /home/$USER/tulpa-ai/.env
+
+# Start Ollama if not running
+if ! systemctl is-active --quiet ollama; then
+    ollama serve &
+    sleep 5
+fi
+
+# Pull/update models
+ollama pull tinydolphin:1.1b-q4_K_M
+
+# Start RAG system
+cd /home/$USER/tulpa-ai
+python3 enhanced_rag_tulpa.py --voice --wake-word "hey tulpa"
+EOF
+
+chmod +x start_tulpa.sh
+
+# Enable services
+sudo systemctl daemon-reload
+sudo systemctl enable tulpa.service
+
+echo "Installation complete!"
+echo "Start with: sudo systemctl start tulpa"
+echo "Or manually: ./start_tulpa.sh"
